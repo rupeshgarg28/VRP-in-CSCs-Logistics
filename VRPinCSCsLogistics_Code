@@ -1,0 +1,80 @@
+/*********************************************
+ * OPL 22.1.0.0 Model
+ * Author: RUPESH GARG
+ * Creation Date: Nov 15, 2022 at 7:45:29 PM
+ *********************************************/
+/*********************************************
+ * OPL 22.1.0.0 Model
+ * Author: RUPESH GARG
+ * Creation Date: Nov 27, 2022 at 2:20:44 PM
+ *********************************************/
+int supply_node = 6;     //number of supply nodes
+int demand_node = 6;     //number of demand nodes
+
+range sup = 1..supply_node;
+range dmnd = 1..demand_node;
+
+int s_r[sup] = [25000, 50000, 30000, 35000, 10000, 20000];    //supply of refrigerated commodities
+int s_df[sup] = [29000, 24000, 40000, 30000, 29000, 33000];   //supply of deep-frozen commodities
+int d_r[dmnd] = [45000, 20000, 30000, 30000, 20000, 30000];   //demand of refrigerated commodities
+int d_df[dmnd] = [26000, 34000, 33000, 20000, 33000, 40000];  //demand of deep-frozen commodities
+
+float penalty = 0.05;     //penalty for late delievry is 0.05 $/late hr per unit
+float cooling_r = 0.00004;   //cooling cost of refrigerated commodities in $/hr per unit
+float cooling_df = 0.00007;   //cooling cost of deep-frozen commodities in $/hr per unit
+
+//cost of transporting 1 unit of commodity from supply node i to demand node j
+float transport_cost[sup][dmnd] = [[0.21,0.50,0.34,0.57,0.61,0.17],
+                                   [0.10,0.63,0.62,0.51,0.62,0.63], 
+                                   [0.55,0.40,0.52,0.37,0.47,0.49],
+                                   [0.57,0.48,0.75,0.41,0.59,0.58],
+                                   [0.35,0.65,0.47,0.58,0.27,0.30],
+                                   [0.41,0.52,0.41,0.27,0.51,0.49]];
+                                
+float holding_cost[dmnd] = [0.09,0.11,0.14,0.04,0.13,0.08];  //holding cost of 1 unit of commodity
+
+//time taken in transporting 1 unit of commodity from supply node i to demand node j
+float time[sup][dmnd] = [[4.17,3.64,2.11,2.10,4.06,3.87],
+                         [3.59,3.22,4.00,2.62,3.99,2.44],
+                         [2.88,3.09,2.66,2.12,1.21,4.77],
+                         [2.45,3.00,3.21,4.33,2.70,1.17],
+                         [3.50,2.61,1.86,2.01,3.26,1.04],
+                         [2.89,4.99,2.58,3.66,1.77,4.22]];
+
+dvar float+ q_r[sup][dmnd];    //quantity of refrigerated commodities from supply node i to demand node j in thousand kgs
+dvar float+ q_df[sup][dmnd];   //quantity of deep-frozen commodities from supply node i to demand node j in thousand kgs
+dvar float+ M_r[dmnd];
+dvar float+ M_df[dmnd];
+dvar float+ inv_r[dmnd];       //inventory of refrigerated commodities at demand node j in thousand kgs
+dvar float+ inv_df[dmnd];      //inventory of deep-frozen commodities at demand node j in thousand kgs
+dvar boolean z[sup][dmnd];     //Penalty factor
+
+//Objective Function: Transporation cost + Penalty cost due to late delievery + Cooling cost of
+//refrigerated(0.05 $/hr) and deep-frozen(0.1 $/hr) commodities + Penalty cost of unsatisfied demands of refrigerated
+//and deep-frozen commodities + Holding cost of inventory of refrigerated and deep-frozen commodities
+minimize (sum(i in sup, j in dmnd)((q_r[i][j]+q_df[i][j])*transport_cost[i][j] + 
+               (q_r[i][j]+q_df[i][j])*(z[i][j]*penalty*(time[i][j]-3)) + (q_r[i][j]*cooling_r + q_df[i][j]*cooling_df)*time[i][j]) +
+              sum(j in dmnd)(inv_r[j]+inv_df[j])*holding_cost[j]);
+
+//Constraints:
+subject to{
+//Total quantity of both commodities delievered from supply node i is equal to the supply of node i
+   forall(i in sup) sum(j in dmnd)(q_r[i][j]) == s_r[i];
+   forall(i in sup) sum(j in dmnd)(q_df[i][j]) == s_df[i];
+   
+//Total quantity delievered at demand node j is equal to the demand + inventory stored - unsatisfied demand of node j 
+   forall(j in dmnd) sum(i in sup)(q_r[i][j]) == d_r[j] + inv_r[j] - M_r[j];
+   forall(j in dmnd) sum(i in sup)(q_df[i][j]) == d_df[j] + inv_df[j] - M_df[j];
+
+//All quantities whether unsatisfied demand or inventory stored, are non-negetive
+   forall(j in dmnd) inv_r[j] >= 0;
+   forall(j in dmnd) inv_df[j] >= 0;
+
+//Penalty factor is 0 when delievered within 3 hours and 1 for deliveries which take more than 3 hours to complete
+   forall(i in sup, j in dmnd) if(time[i][j] <= 3){
+     z[i][j] == 0;
+   }
+   else{
+     z[i][j] == 1;
+   }
+}
